@@ -11,7 +11,7 @@ import {
 } from '@mui/material';
 import axios from 'axios';
 
-function App() {
+const App: React.FC = () => {
   const [sitemapUrl, setSitemapUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -99,6 +99,6 @@ function App() {
       </Box>
     </Container>
   );
-}
+};
 
-export default App;
+export default App; 
