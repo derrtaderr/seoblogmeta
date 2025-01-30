@@ -8,6 +8,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from typing import List
 import xml.etree.ElementTree as ET
+import json
 
 load_dotenv()
 
@@ -22,6 +23,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+
 class SitemapURL(BaseModel):
     url: str
 
@@ -29,6 +33,54 @@ class BlogAnalysis(BaseModel):
     title: str
     url: str
     summary: str
+
+async def analyze_content_with_deepseek(content: str) -> str:
+    """
+    Analyze content using DeepSek API to generate SEO-optimized summary
+    """
+    headers = {
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    prompt = f"""
+    Please analyze the following blog content and provide a 2-3 sentence SEO-optimized summary. 
+    Focus on key points and use relevant keywords naturally:
+
+    {content[:4000]}  # Limiting content length to avoid token limits
+    """
+    
+    payload = {
+        "model": "deepseek-chat",
+        "messages": [
+            {"role": "system", "content": "You are an SEO expert who creates concise, engaging summaries."},
+            {"role": "user", "content": prompt}
+        ],
+        "max_tokens": 150  # Limiting response length for summary
+    }
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                DEEPSEEK_API_URL,
+                headers=headers,
+                json=payload,
+                timeout=30.0
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                return result['choices'][0]['message']['content'].strip()
+            else:
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"DeepSek API error: {response.text}"
+                )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error calling DeepSek API: {str(e)}"
+        )
 
 @app.post("/analyze-sitemap")
 async def analyze_sitemap(sitemap: SitemapURL):
@@ -58,21 +110,20 @@ async def analyze_sitemap(sitemap: SitemapURL):
                     soup = BeautifulSoup(response.text, 'html.parser')
                     title = soup.title.string if soup.title else "No title"
                     
-                    # Extract main content (this might need adjustment based on your blog structure)
+                    # Extract main content
                     content = ""
                     main_content = soup.find('article') or soup.find('main') or soup.find('div', class_='content')
                     if main_content:
                         content = main_content.get_text(strip=True)
-                    
-                    # Call DeepSek API for analysis (placeholder - you'll need to implement this)
-                    # This is where you'll integrate with DeepSek's API
-                    summary = "Placeholder summary - DeepSek API integration pending"
-                    
-                    analyzed_blogs.append({
-                        "title": title,
-                        "url": blog_url,
-                        "summary": summary
-                    })
+                        
+                        # Generate SEO-optimized summary using DeepSek
+                        summary = await analyze_content_with_deepseek(content)
+                        
+                        analyzed_blogs.append({
+                            "title": title,
+                            "url": blog_url,
+                            "summary": summary
+                        })
 
         # Create Excel file
         df = pd.DataFrame(analyzed_blogs)
