@@ -34,9 +34,9 @@ class BlogAnalysis(BaseModel):
     url: str
     summary: str
 
-async def analyze_content_with_deepseek(content: str) -> str:
+async def analyze_content_with_deepseek(content: str, title: str) -> str:
     """
-    Analyze content using DeepSek API to generate SEO-optimized summary
+    Analyze content using DeepSeek Reasoner (R1) API to generate SEO-optimized summary
     """
     headers = {
         "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
@@ -44,19 +44,35 @@ async def analyze_content_with_deepseek(content: str) -> str:
     }
     
     prompt = f"""
-    Please analyze the following blog content and provide a 2-3 sentence SEO-optimized summary. 
-    Focus on key points and use relevant keywords naturally:
-
+    As an SEO expert, analyze this blog post titled "{title}" and create a compelling 2-3 sentence summary.
+    
+    Follow these steps:
+    1. Identify the main topic and key concepts
+    2. Extract important keywords and phrases
+    3. Create a concise summary that:
+       - Captures the main value proposition
+       - Incorporates relevant keywords naturally
+       - Uses active voice and engaging language
+       - Maintains SEO best practices
+    
+    Blog Content:
     {content[:4000]}  # Limiting content length to avoid token limits
+    
+    Provide only the final summary without any additional commentary or step-by-step analysis.
     """
     
     payload = {
-        "model": "deepseek-chat",
+        "model": "deepseek-reasoner",  # Using the R1 model for better reasoning
         "messages": [
-            {"role": "system", "content": "You are an SEO expert who creates concise, engaging summaries."},
+            {
+                "role": "system", 
+                "content": "You are an expert SEO content analyst specializing in creating engaging, keyword-rich summaries that drive organic traffic while maintaining readability and value for users."
+            },
             {"role": "user", "content": prompt}
         ],
-        "max_tokens": 150  # Limiting response length for summary
+        "temperature": 0.3,  # Lower temperature for more focused outputs
+        "max_tokens": 150,  # Limiting response length for summary
+        "top_p": 0.8,  # Maintaining good diversity while ensuring quality
     }
     
     try:
@@ -74,12 +90,12 @@ async def analyze_content_with_deepseek(content: str) -> str:
             else:
                 raise HTTPException(
                     status_code=response.status_code,
-                    detail=f"DeepSek API error: {response.text}"
+                    detail=f"DeepSeek API error: {response.text}"
                 )
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Error calling DeepSek API: {str(e)}"
+            detail=f"Error calling DeepSeek API: {str(e)}"
         )
 
 @app.post("/analyze-sitemap")
@@ -116,8 +132,8 @@ async def analyze_sitemap(sitemap: SitemapURL):
                     if main_content:
                         content = main_content.get_text(strip=True)
                         
-                        # Generate SEO-optimized summary using DeepSek
-                        summary = await analyze_content_with_deepseek(content)
+                        # Generate SEO-optimized summary using DeepSeek
+                        summary = await analyze_content_with_deepseek(content, title)
                         
                         analyzed_blogs.append({
                             "title": title,
